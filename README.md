@@ -194,7 +194,7 @@ Projekt dostępny na licencji MIT.
 
 ## 👤 Autor
 
-Kurs "Od zera do AI" - Moduł 8
+Łukasz_Es
 
 ---
 
