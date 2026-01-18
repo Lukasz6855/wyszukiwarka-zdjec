@@ -1,0 +1,31 @@
+# Dane użytkownika - nie pushować na Git
+zdjecia_przetworzone/
+uploaded_images/
+
+# Konfiguracja - zawiera klucze API
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Baza danych Qdrant (opcjonalnie)
+qdrant_storage/
+qdrant_data/
+
+# Mój prompt
+prompt.txt
+27__app_image_finder.excalidraw.png
