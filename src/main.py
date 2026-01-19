@@ -16,26 +16,27 @@ def czy_streamlit_cloud():
     Wykryj czy aplikacja działa na Streamlit Cloud.
     Streamlit Cloud ustawia specyficzne zmienne środowiskowe.
     """
-    # Streamlit Cloud ustawia te zmienne
     return (
         os.getenv("STREAMLIT_SHARING_MODE") is not None or
         os.getenv("STREAMLIT_SERVER_HEADLESS") == "true" or
         "streamlit.io" in os.getenv("HOSTNAME", "")
     )
 
-def sprawdz_klucz_lokalny():
-    """
-    Sprawdź czy klucz OpenAI jest w lokalnym pliku .env.
-    
-    UWAGA: Używane TYLKO lokalnie, NIE na Streamlit Cloud!
-    Na Cloud każdy użytkownik musi wpisać swój klucz ręcznie.
-    """
-    # Sprawdź tylko jeśli NIE jesteśmy na Streamlit Cloud
+# Sprawdź klucz z .env TYLKO raz, przed startem Streamlit
+# (używamy zmiennej globalnej aby nie było powtarzanego load_dotenv)
+if "KLUCZ_Z_ENV_SPRAWDZONY" not in st.session_state:
+    from dotenv import load_dotenv
+    load_dotenv()
+    # Sprawdź czy jesteśmy lokalnie i mamy klucz w .env
     if not czy_streamlit_cloud():
-        klucz = os.getenv("OPENAI_API_KEY")
-        if klucz:
-            return klucz
-    return None
+        klucz_env = os.getenv("OPENAI_API_KEY")
+        if klucz_env:
+            st.session_state.klucz_z_env = klucz_env
+        else:
+            st.session_state.klucz_z_env = None
+    else:
+        st.session_state.klucz_z_env = None
+    st.session_state.KLUCZ_Z_ENV_SPRAWDZONY = True
 
 # ===== KONFIGURACJA STRONY =====
 st.set_page_config(page_title="Znajdywacz zdjęć", layout="wide")
@@ -77,29 +78,37 @@ with st.sidebar:
     st.header("⚙️ Konfiguracja")
     
     # SEKCJA 1: KLUCZ OPENAI
-    # Sprawdź czy jesteśmy lokalnie i czy mamy klucz w .env
-    klucz_lokalny = sprawdz_klucz_lokalny()
-    
-    if klucz_lokalny:
-        # Lokalnie z plikiem .env - użyj automatycznie
+    # Sprawdź czy mamy klucz z .env (lokalnie)
+    if st.session_state.get("klucz_z_env"):
+        # Klucz z .env - użyj automatycznie
         st.success("✅ Klucz OpenAI załadowany z pliku .env")
         st.info("💡 Używasz klucza z lokalnego pliku .env")
-        wczytaj_klucz_openai(klucz_lokalny)
+        # Zapisz w os.environ dla modułów (baza_danych, api_openai)
+        os.environ["OPENAI_API_KEY"] = st.session_state.klucz_z_env
         klucz_openai_aktywny = True
     else:
-        # Streamlit Cloud LUB lokalnie bez .env - wymagaj ręcznego wprowadzenia
+        # Brak klucza w .env - wymaga ręcznego wprowadzenia
         if czy_streamlit_cloud():
             st.info("☁️ Streamlit Cloud: Wprowadź swój klucz OpenAI")
         
         klucz_openai = st.text_input(
             "Wprowadź swój klucz OpenAI:",
             type="password",
-            help="Twój klucz nie jest nigdzie zapisywany. Jest używany tylko w tej sesji."
+            help="Twój klucz nie jest nigdzie zapisywany. Jest używany tylko w tej sesji.",
+            key="openai_key_input"
         )
         
         if klucz_openai:
-            wczytaj_klucz_openai(klucz_openai)
-            klucz_openai_aktywny = True
+            # Walidacja klucza (prosty check)
+            if klucz_openai.startswith("sk-") and len(klucz_openai) > 20:
+                st.success("✅ Klucz OpenAI załadowany prawidłowo")
+                # Zapisz w os.environ dla modułów
+                os.environ["OPENAI_API_KEY"] = klucz_openai
+                klucz_openai_aktywny = True
+            else:
+                st.error("❌ Nieprawidłowy klucz OpenAI")
+                st.info("💡 Klucz powinien zaczynać się od 'sk-'")
+                klucz_openai_aktywny = False
         else:
             klucz_openai_aktywny = False
             st.warning("⚠️ Wprowadź klucz OpenAI, aby korzystać z aplikacji")
@@ -151,60 +160,60 @@ with st.sidebar:
             st.rerun()
         else:
             st.warning("Proszę wybrać co najmniej jedno zdjęcie.")
+    
+    # ===== OBSŁUGA DUPLIKATÓW W PASKU BOCZNYM =====
+    if st.session_state.w_trakcie_sprawdzania and st.session_state.cached_files:
+        st.divider()
         
-        # ===== OBSŁUGA DUPLIKATÓW W PASKU BOCZNYM =====
-        if st.session_state.w_trakcie_sprawdzania and st.session_state.cached_files:
-            st.divider()
+        # KROK 1: Sprawdzenie duplikatów (tylko raz)
+        if not st.session_state.znalezione_duplikaty and len(st.session_state.decyzje_uzytkownika) == 0:
+            st.write("🔍 Sprawdzanie duplikatów w bazie Qdrant...")
             
-            # KROK 1: Sprawdzenie duplikatów (tylko raz)
-            if not st.session_state.znalezione_duplikaty and len(st.session_state.decyzje_uzytkownika) == 0:
-                st.write("🔍 Sprawdzanie duplikatów w bazie Qdrant...")
+            for idx, plik in enumerate(st.session_state.cached_files):
+                czy_istnieje = sprawdz_czy_zdjecie_istnieje(plik.name)
                 
-                for idx, plik in enumerate(st.session_state.cached_files):
-                    czy_istnieje = sprawdz_czy_zdjecie_istnieje(plik.name)
-                    
-                    if czy_istnieje:
-                        st.session_state.znalezione_duplikaty.append((idx, plik.name))
-                        st.write(f"  ⚠️ Duplikat: {plik.name}")
-                    else:
-                        st.write(f"  ✅ Nowe: {plik.name}")
-            
-            # KROK 2: Pytanie o duplikaty
-            if st.session_state.znalezione_duplikaty:
-                st.warning("⚠️ Znaleziono duplikaty!")
-                st.write("Co chcesz zrobić z każdym duplikatem?")
-                
-                # Dla każdego duplikatu pokaż opcje
-                for idx, nazwa_pliku in st.session_state.znalezione_duplikaty:
-                    st.write(f"📄 **{nazwa_pliku}**")
-                    
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        if st.button("⏭️ Pomiń", key=f"pominac_{idx}"):
-                            st.session_state.decyzje_uzytkownika[idx] = "pomiń"
-                            st.rerun()
-                    
-                    with col2:
-                        if st.button("✅ Przetwórz jako nowy", key=f"przetwarzac_{idx}"):
-                            st.session_state.decyzje_uzytkownika[idx] = "przetwórz"
-                            st.rerun()
-                
-                # Sprawdź czy są wszystkie decyzje
-                czy_wszystkie = len(st.session_state.decyzje_uzytkownika) == len(st.session_state.znalezione_duplikaty)
-                
-                if czy_wszystkie:
-                    st.success(f"✅ Decyzje dla {len(st.session_state.decyzje_uzytkownika)} duplikatów podane")
+                if czy_istnieje:
+                    st.session_state.znalezione_duplikaty.append((idx, plik.name))
+                    st.write(f"  ⚠️ Duplikat: {plik.name}")
                 else:
-                    st.info(f"⏳ Czekam: {len(st.session_state.decyzje_uzytkownika)}/{len(st.session_state.znalezione_duplikaty)}")
+                    st.write(f"  ✅ Nowe: {plik.name}")
+        
+        # KROK 2: Pytanie o duplikaty
+        if st.session_state.znalezione_duplikaty:
+            st.warning("⚠️ Znaleziono duplikaty!")
+            st.write("Co chcesz zrobić z każdym duplikatem?")
             
-            # KROK 3: Przetwarzanie (gdy są decyzje lub brak duplikatów)
-            czy_gotowe_do_przetworzenia = (
-                (not st.session_state.znalezione_duplikaty) or 
-                (len(st.session_state.decyzje_uzytkownika) == len(st.session_state.znalezione_duplikaty))
-            )
+            # Dla każdego duplikatu pokaż opcje
+            for idx, nazwa_pliku in st.session_state.znalezione_duplikaty:
+                st.write(f"📄 **{nazwa_pliku}**")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("⏭️ Pomiń", key=f"pominac_{idx}"):
+                        st.session_state.decyzje_uzytkownika[idx] = "pomiń"
+                        st.rerun()
+                
+                with col2:
+                    if st.button("✅ Przetwórz jako nowy", key=f"przetwarzac_{idx}"):
+                        st.session_state.decyzje_uzytkownika[idx] = "przetwórz"
+                        st.rerun()
             
-            if czy_gotowe_do_przetworzenia and st.session_state.cached_files and st.session_state.w_trakcie_sprawdzania:
+            # Sprawdź czy są wszystkie decyzje
+            czy_wszystkie = len(st.session_state.decyzje_uzytkownika) == len(st.session_state.znalezione_duplikaty)
+            
+            if czy_wszystkie:
+                st.success(f"✅ Decyzje dla {len(st.session_state.decyzje_uzytkownika)} duplikatów podane")
+            else:
+                st.info(f"⏳ Czekam: {len(st.session_state.decyzje_uzytkownika)}/{len(st.session_state.znalezione_duplikaty)}")
+        
+        # KROK 3: Przetwarzanie (gdy są decyzje lub brak duplikatów)
+        czy_gotowe_do_przetworzenia = (
+            (not st.session_state.znalezione_duplikaty) or 
+            (len(st.session_state.decyzje_uzytkownika) == len(st.session_state.znalezione_duplikaty))
+        )
+        
+        if czy_gotowe_do_przetworzenia and st.session_state.cached_files and st.session_state.w_trakcie_sprawdzania:
                 
                 with st.spinner("⏳ Przetwarzanie zdjęć..."):
                     # Przygotuj mapowanie nazw
