@@ -11,22 +11,31 @@ from baza_danych import (
 from utils import oszacuj_koszt
 
 # ===== FUNKCJE POMOCNICZE =====
-def sprawdz_dostepnosc_klucza_openai():
+def czy_streamlit_cloud():
     """
-    Sprawdź czy klucz OpenAI jest dostępny w zmiennych środowiskowych.
-    
-    UWAGA: Celowo NIE sprawdzamy st.secrets dla klucza OpenAI!
-    Każdy użytkownik aplikacji na Streamlit Cloud musi podać swój własny klucz.
-    
-    Secrets są używane tylko dla infrastruktury (Qdrant), nie dla kluczy użytkowników.
-    
-    Zwraca: True jeśli klucz jest dostępny w os.environ, False jeśli nie
+    Wykryj czy aplikacja działa na Streamlit Cloud.
+    Streamlit Cloud ustawia specyficzne zmienne środowiskowe.
     """
-    # Sprawdź tylko zmienne środowiskowe (dla lokalnego użycia z .env)
-    if os.getenv("OPENAI_API_KEY"):
-        return True
+    # Streamlit Cloud ustawia te zmienne
+    return (
+        os.getenv("STREAMLIT_SHARING_MODE") is not None or
+        os.getenv("STREAMLIT_SERVER_HEADLESS") == "true" or
+        "streamlit.io" in os.getenv("HOSTNAME", "")
+    )
+
+def sprawdz_klucz_lokalny():
+    """
+    Sprawdź czy klucz OpenAI jest w lokalnym pliku .env.
     
-    return False
+    UWAGA: Używane TYLKO lokalnie, NIE na Streamlit Cloud!
+    Na Cloud każdy użytkownik musi wpisać swój klucz ręcznie.
+    """
+    # Sprawdź tylko jeśli NIE jesteśmy na Streamlit Cloud
+    if not czy_streamlit_cloud():
+        klucz = os.getenv("OPENAI_API_KEY")
+        if klucz:
+            return klucz
+    return None
 
 # ===== KONFIGURACJA STRONY =====
 st.set_page_config(page_title="Znajdywacz zdjęć", layout="wide")
@@ -68,16 +77,20 @@ with st.sidebar:
     st.header("⚙️ Konfiguracja")
     
     # SEKCJA 1: KLUCZ OPENAI
-    # Sprawdź czy klucz jest już w zmiennych środowiskowych (z pliku .env - tylko lokalnie)
-    klucz_z_env = sprawdz_dostepnosc_klucza_openai()
+    # Sprawdź czy jesteśmy lokalnie i czy mamy klucz w .env
+    klucz_lokalny = sprawdz_klucz_lokalny()
     
-    if klucz_z_env:
-        # Klucz załadowany z .env (użycie lokalne)
+    if klucz_lokalny:
+        # Lokalnie z plikiem .env - użyj automatycznie
         st.success("✅ Klucz OpenAI załadowany z pliku .env")
         st.info("💡 Używasz klucza z lokalnego pliku .env")
+        wczytaj_klucz_openai(klucz_lokalny)
         klucz_openai_aktywny = True
     else:
-        # Wymaga ręcznego wprowadzenia (Streamlit Cloud lub brak .env)
+        # Streamlit Cloud LUB lokalnie bez .env - wymagaj ręcznego wprowadzenia
+        if czy_streamlit_cloud():
+            st.info("☁️ Streamlit Cloud: Wprowadź swój klucz OpenAI")
+        
         klucz_openai = st.text_input(
             "Wprowadź swój klucz OpenAI:",
             type="password",
@@ -317,8 +330,8 @@ with tab1:
         key="search_input"
     )
     
-    # Sprawdź czy klucz OpenAI jest aktywny (z inputu lub zmiennych środowiskowych)
-    if sprawdz_dostepnosc_klucza_openai():
+    # Sprawdź czy użytkownik wprowadził klucz OpenAI
+    if klucz_openai_aktywny:
         if opis_wyszukiwania:
             st.subheader("📋 Wyniki wyszukiwania")
             
@@ -356,8 +369,8 @@ with tab1:
 with tab2:
     st.subheader("📂 Lista wszystkich zdjęć")
     
-    # Sprawdź czy klucz OpenAI jest aktywny
-    if sprawdz_dostepnosc_klucza_openai():
+    # Sprawdź czy użytkownik wprowadził klucz OpenAI
+    if klucz_openai_aktywny:
         wszystkie_zdjecia = pobierz_wszystkie_zdjecia()
         
         if wszystkie_zdjecia:
