@@ -64,23 +64,28 @@ def inicjalizuj_kolekcje():
         # Spróbuj pobrać info o kolekcji (aby sprawdzić czy istnieje)
         klient_qdrant.get_collection(NAZWA_KOLEKCJI)
     except Exception as e:
-        # Wyłapano wyjątek - kolekcja nie istnieje
+        # Wyłapano wyjątek - sprawdź rodzaj błędu
         msg = str(e)  # zamień wyjątek na string aby sprawdzić kod błędu
         
         # Jeśli błąd to 403 Forbidden - problem z dostępem do Qdrant Cloud
         if "403" in msg or "forbidden" in msg.lower():
             raise ValueError("Brak dostępu do Qdrant (403 Forbidden). Sprawdź QDRANT_URL i QDRANT_API_KEY w .env.")
         
-        # Spróbuj utworzyć nową kolekcję
-        try:
-            klient_qdrant.create_collection(
-                collection_name=NAZWA_KOLEKCJI,  # nazwa kolekcji
-                vectors_config={"size": 1536, "distance": "Cosine"}  # rozmiar wektora=1536 (text-embedding-3-small), miara=cosinus
-            )
-            print(f"[baza_danych] Utworzono kolekcję '{NAZWA_KOLEKCJI}'")
-        except Exception as e2:
-            # Jeśli nie udało się utworzyć - wyrzuć błąd
-            raise RuntimeError(f"Nie udało się utworzyć kolekcji: {e2}")
+        # Jeśli błąd to 404 Not Found lub "doesn't exist" - kolekcja nie istnieje, trzeba ją utworzyć
+        if "404" in msg or "not found" in msg.lower() or "doesn't exist" in msg.lower():
+            # Spróbuj utworzyć nową kolekcję
+            try:
+                klient_qdrant.create_collection(
+                    collection_name=NAZWA_KOLEKCJI,  # nazwa kolekcji
+                    vectors_config={"size": 1536, "distance": "Cosine"}  # rozmiar wektora=1536 (text-embedding-3-small), miara=cosinus
+                )
+                print(f"[baza_danych] Utworzono kolekcję '{NAZWA_KOLEKCJI}'")
+            except Exception as e2:
+                # Jeśli nie udało się utworzyć - wyrzuć błąd
+                raise RuntimeError(f"Nie udało się utworzyć kolekcji: {e2}")
+        else:
+            # Inny nieoczekiwany błąd
+            raise RuntimeError(f"Nieoczekiwany błąd przy sprawdzaniu kolekcji: {e}")
 
 # ===== FUNKCJE DO OBSŁUGI EMBEDDINGÓW =====
 
