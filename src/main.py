@@ -1,6 +1,7 @@
 # Zawartość pliku: /znajdywacz-zdjec/znajdywacz-zdjec/src/main.py
 
 import streamlit as st
+import os
 from config import wczytaj_klucz_openai, wczytaj_modele, pobierz_rzeczywista_nazwe_modelu
 from przetwarzanie_zdjec import przetworz_zdjecia
 from baza_danych import (
@@ -8,6 +9,24 @@ from baza_danych import (
     usun_embedding, usun_wszystkie_embeddingi, sprawdz_czy_zdjecie_istnieje
 )
 from utils import oszacuj_koszt
+
+# ===== FUNKCJE POMOCNICZE =====
+def sprawdz_dostepnosc_klucza_openai():
+    """
+    Sprawdź czy klucz OpenAI jest dostępny w zmiennych środowiskowych.
+    
+    UWAGA: Celowo NIE sprawdzamy st.secrets dla klucza OpenAI!
+    Każdy użytkownik aplikacji na Streamlit Cloud musi podać swój własny klucz.
+    
+    Secrets są używane tylko dla infrastruktury (Qdrant), nie dla kluczy użytkowników.
+    
+    Zwraca: True jeśli klucz jest dostępny w os.environ, False jeśli nie
+    """
+    # Sprawdź tylko zmienne środowiskowe (dla lokalnego użycia z .env)
+    if os.getenv("OPENAI_API_KEY"):
+        return True
+    
+    return False
 
 # ===== KONFIGURACJA STRONY =====
 st.set_page_config(page_title="Znajdywacz zdjęć", layout="wide")
@@ -49,58 +68,76 @@ with st.sidebar:
     st.header("⚙️ Konfiguracja")
     
     # SEKCJA 1: KLUCZ OPENAI
-    klucz_openai = st.text_input("Wprowadź swój klucz OpenAI:", type="password")
+    # Sprawdź czy klucz jest już w zmiennych środowiskowych (z pliku .env - tylko lokalnie)
+    klucz_z_env = sprawdz_dostepnosc_klucza_openai()
     
-    if klucz_openai:
-        wczytaj_klucz_openai(klucz_openai)
-        
-        # SEKCJA 2: WYBÓR MODELU
-        modele, model_domyslny = wczytaj_modele()
-        
-        try:
-            indeks_domyslny = modele.index(model_domyslny)
-        except Exception:
-            indeks_domyslny = 0
-        
-        mapy_modeli = {
-            "model_prosty": "Model prosty: gpt-4o-mini",
-            "model_sredni": "Model średni: gpt-4o",
-            "model_zaawansowany": "Model zaawansowany: gpt-4-turbo"
-        }
-        
-        opcje_wyswietlane = [mapy_modeli.get(m, m) for m in modele]
-        
-        model_wybrany_display = st.selectbox(
-            "Wybierz model OpenAI:",
-            opcje_wyswietlane,
-            index=indeks_domyslny
+    if klucz_z_env:
+        # Klucz załadowany z .env (użycie lokalne)
+        st.success("✅ Klucz OpenAI załadowany z pliku .env")
+        st.info("💡 Używasz klucza z lokalnego pliku .env")
+        klucz_openai_aktywny = True
+    else:
+        # Wymaga ręcznego wprowadzenia (Streamlit Cloud lub brak .env)
+        klucz_openai = st.text_input(
+            "Wprowadź swój klucz OpenAI:",
+            type="password",
+            help="Twój klucz nie jest nigdzie zapisywany. Jest używany tylko w tej sesji."
         )
         
-        model_wybrany_id = modele[opcje_wyswietlane.index(model_wybrany_display)]
-        model_wybrany = pobierz_rzeczywista_nazwe_modelu(model_wybrany_id)
+        if klucz_openai:
+            wczytaj_klucz_openai(klucz_openai)
+            klucz_openai_aktywny = True
+        else:
+            klucz_openai_aktywny = False
+            st.warning("⚠️ Wprowadź klucz OpenAI, aby korzystać z aplikacji")
+    
+    # SEKCJA 2: WYBÓR MODELU (dostępny zawsze, ale funkcjonalny tylko gdy klucz jest aktywny)
+    modele, model_domyslny = wczytaj_modele()
         
-        # SEKCJA 3: WCZYTYWANIE ZDJĘĆ
-        st.subheader("📸 Wczytaj zdjęcia")
-        
-        uploaded_files = st.file_uploader(
-            "Prześlij zdjęcia",
-            accept_multiple_files=True,
-            type=["jpg", "jpeg", "png"],
-            key=f"uploader_{st.session_state.reset_uploader}"
-        )
-        
-        # PRZYCISK: Przetwórz zdjęcia
-        if st.button("Przetwórz zdjęcia", key="btn_process"):
-            if uploaded_files:
-                st.session_state.cached_files = uploaded_files
-                st.session_state.model_do_przetworzenia = model_wybrany
-                st.session_state.model_id_do_przetworzenia = model_wybrany_id
-                st.session_state.w_trakcie_sprawdzania = True
-                st.session_state.znalezione_duplikaty = []
-                st.session_state.decyzje_uzytkownika = {}
-                st.rerun()
-            else:
-                st.warning("Proszę wybrać co najmniej jedno zdjęcie.")
+    try:
+        indeks_domyslny = modele.index(model_domyslny)
+    except Exception:
+        indeks_domyslny = 0
+    
+    mapy_modeli = {
+        "model_prosty": "Model prosty: gpt-4o-mini",
+        "model_sredni": "Model średni: gpt-4o",
+        "model_zaawansowany": "Model zaawansowany: gpt-4-turbo"
+    }
+    
+    opcje_wyswietlane = [mapy_modeli.get(m, m) for m in modele]
+    
+    model_wybrany_display = st.selectbox(
+        "Wybierz model OpenAI:",
+        opcje_wyswietlane,
+        index=indeks_domyslny
+    )
+    
+    model_wybrany_id = modele[opcje_wyswietlane.index(model_wybrany_display)]
+    model_wybrany = pobierz_rzeczywista_nazwe_modelu(model_wybrany_id)
+    
+    # SEKCJA 3: WCZYTYWANIE ZDJĘĆ
+    st.subheader("📸 Wczytaj zdjęcia")
+    
+    uploaded_files = st.file_uploader(
+        "Prześlij zdjęcia",
+        accept_multiple_files=True,
+        type=["jpg", "jpeg", "png"],
+        key=f"uploader_{st.session_state.reset_uploader}"
+    )
+    
+    # PRZYCISK: Przetwórz zdjęcia
+    if st.button("Przetwórz zdjęcia", key="btn_process", disabled=not klucz_openai_aktywny):
+        if uploaded_files:
+            st.session_state.cached_files = uploaded_files
+            st.session_state.model_do_przetworzenia = model_wybrany
+            st.session_state.model_id_do_przetworzenia = model_wybrany_id
+            st.session_state.w_trakcie_sprawdzania = True
+            st.session_state.znalezione_duplikaty = []
+            st.session_state.decyzje_uzytkownika = {}
+            st.rerun()
+        else:
+            st.warning("Proszę wybrać co najmniej jedno zdjęcie.")
         
         # ===== OBSŁUGA DUPLIKATÓW W PASKU BOCZNYM =====
         if st.session_state.w_trakcie_sprawdzania and st.session_state.cached_files:
@@ -280,7 +317,8 @@ with tab1:
         key="search_input"
     )
     
-    if klucz_openai:
+    # Sprawdź czy klucz OpenAI jest aktywny (z inputu lub zmiennych środowiskowych)
+    if sprawdz_dostepnosc_klucza_openai():
         if opis_wyszukiwania:
             st.subheader("📋 Wyniki wyszukiwania")
             
@@ -318,7 +356,8 @@ with tab1:
 with tab2:
     st.subheader("📂 Lista wszystkich zdjęć")
     
-    if klucz_openai:
+    # Sprawdź czy klucz OpenAI jest aktywny
+    if sprawdz_dostepnosc_klucza_openai():
         wszystkie_zdjecia = pobierz_wszystkie_zdjecia()
         
         if wszystkie_zdjecia:

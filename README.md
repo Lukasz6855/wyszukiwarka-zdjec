@@ -61,18 +61,20 @@ znajdywacz_zdjec_v4/
 - Klucz API OpenAI ([uzyskaj tutaj](https://platform.openai.com/api-keys))
 - Konto Qdrant Cloud ([zarejestruj się](https://cloud.qdrant.io/))
 
-### Krok 1: Klonowanie repozytorium
+### Uruchomienie lokalne
+
+#### Krok 1: Klonowanie repozytorium
 ```bash
 git clone <url-repozytorium>
 cd znajdywacz_zdjec_v4
 ```
 
-### Krok 2: Instalacja zależności
+#### Krok 2: Instalacja zależności
 ```bash
 pip install -r requirements.txt
 ```
 
-### Krok 3: Konfiguracja zmiennych środowiskowych
+#### Krok 3: Konfiguracja zmiennych środowiskowych
 1. Skopiuj plik `.env.example` jako `.env`:
 ```bash
 cp .env.example .env
@@ -85,12 +87,39 @@ QDRANT_URL=https://twoja-instancja.qdrant.cloud
 QDRANT_API_KEY=twoj-klucz-qdrant
 ```
 
-### Krok 4: Uruchomienie aplikacji
+#### Krok 4: Uruchomienie aplikacji
 ```bash
 streamlit run src/main.py
 ```
 
 Aplikacja uruchomi się w przeglądarce pod adresem `http://localhost:8501`
+
+### Deployment na Streamlit Cloud
+
+#### Krok 1: Przygotowanie repozytorium
+1. Upewnij się, że plik `.env` **NIE** jest w repozytorium (sprawdź `.gitignore`)
+2. Push kodu do GitHub
+
+#### Krok 2: Konfiguracja secrets w Streamlit Cloud
+1. Zaloguj się na [share.streamlit.io](https://share.streamlit.io)
+2. Deploy aplikacji (wybierz repozytorium i branch)
+3. W ustawieniach aplikacji przejdź do **"Secrets"**
+4. Dodaj następującą konfigurację:
+
+```toml
+# .streamlit/secrets.toml (tylko dla Streamlit Cloud)
+# TYLKO infrastruktura - BEZ klucza OpenAI!
+QDRANT_URL = "https://twoja-instancja.qdrant.cloud"
+QDRANT_API_KEY = "twoj-klucz-qdrant"
+```
+
+5. Zapisz i zrestartuj aplikację
+
+**WAŻNE**: 
+- ❌ **NIE dodawaj** `OPENAI_API_KEY` do secrets!
+- ✅ Każdy użytkownik aplikacji wprowadza swój własny klucz OpenAI w interfejsie
+- 🔒 Dzięki temu nie płacisz za użycie API przez innych użytkowników
+- Secrets służą tylko dla infrastruktury (Qdrant) która jest Twoja
 
 ## 📖 Instrukcja użycia
 
@@ -159,10 +188,16 @@ git commit -m "Remove .env from tracking"
 ## 🐛 Rozwiązywanie problemów
 
 ### Błąd: "Brak klucza OpenAI"
-✅ Sprawdź czy plik `.env` istnieje i zawiera prawidłowy klucz
+✅ **Lokalnie**: Sprawdź czy plik `.env` istnieje i zawiera prawidłowy klucz  
+✅ **Streamlit Cloud**: Sprawdź czy klucz jest dodany w sekcji "Secrets" w ustawieniach aplikacji
 
 ### Błąd: "403 Forbidden" (Qdrant)
-✅ Sprawdź poprawność `QDRANT_URL` i `QDRANT_API_KEY` w `.env`
+✅ Sprawdź poprawność `QDRANT_URL` i `QDRANT_API_KEY` w `.env` lub Streamlit secrets
+
+### Aplikacja nie znajdzie zdjęć po wpisaniu hasła (Streamlit Cloud)
+✅ Sprawdź czy klucz `OPENAI_API_KEY` jest poprawnie skonfigurowany w Streamlit secrets  
+✅ Sprawdź logi aplikacji w Streamlit Cloud (menu → Manage app → Logs)  
+✅ Upewnij się, że używasz tego samego modelu embeddingów (`text-embedding-3-small`)
 
 ### Aplikacja nie wyświetla zdjęć
 ✅ Upewnij się, że folder `zdjecia_przetworzone/` istnieje (tworzy się automatycznie)
@@ -170,9 +205,20 @@ git commit -m "Remove .env from tracking"
 ### Wysokie koszty
 ✅ Użyj modelu `gpt-4o-mini` zamiast droższych wariantów
 
+### Wyszukiwanie działa lokalnie ale nie na Streamlit Cloud
+✅ To był znany bug - naprawiony w wersji v5! Aplikacja teraz automatycznie wykrywa klucz API ze Streamlit secrets
+
 ## 📝 Changelog
 
-### v4 (aktualna)
+### v5 (aktualna) - 🐛 Naprawa wyszukiwania na Streamlit Cloud
+- 🔧 **POPRAWKA KRYTYCZNA**: Naprawiono problem z brakiem wyników wyszukiwania na Streamlit Cloud
+- 🔑 Zmieniono logikę: każdy użytkownik wprowadza swój własny klucz OpenAI (nie z secrets)
+- 🔒 **Bezpieczeństwo**: Właściciel aplikacji nie płaci za użycie API przez innych użytkowników
+- 🔍 Dodano rozbudowane logowanie do debugowania (widoczne w logach Streamlit Cloud)
+- 📚 Zaktualizowano dokumentację z poprawnymi instrukcjami dla Streamlit Cloud
+- ✅ Lokalnie: opcjonalne użycie klucza z .env (dla wygody właściciela)
+
+### v4
 - ✨ Dodano animowany komunikat po przetworzeniu zdjęć
 - 🖼️ Dodano miniaturki w zakładce zarządzania
 - 🔒 Utworzono `.gitignore` i `.env.example`

@@ -94,18 +94,29 @@ def generuj_embedding(tekst):
     Wygeneruj embedding dla tekstu (zamień tekst na wektor)
     Embedding to reprezentacja matematyczna tekstu - liczby które odzwierciedlają znaczenie tekstu
     """
-    # Pobierz klienta OpenAI
-    klient_openai = pobierz_klienta_openai()
-    
-    # Wyślij tekst do OpenAI i otrzymaj embedding
-    odpowiedz = klient_openai.embeddings.create(
-        model="text-embedding-3-small",  # model do generowania embeddingów
-        input=tekst  # tekst do przetworzenia
-    )
-    
-    # Wyciągnij wektor z odpowiedzi (zwróć jako listę liczb)
-    embedding = odpowiedz.data[0].embedding
-    return embedding
+    try:
+        # Pobierz klienta OpenAI
+        print(f"[baza_danych] Pobieram klienta OpenAI...")
+        klient_openai = pobierz_klienta_openai()
+        print(f"[baza_danych] Klient OpenAI gotowy")
+        
+        # Wyślij tekst do OpenAI i otrzymaj embedding
+        print(f"[baza_danych] Wysyłam zapytanie do OpenAI API (model: text-embedding-3-small)...")
+        odpowiedz = klient_openai.embeddings.create(
+            model="text-embedding-3-small",  # model do generowania embeddingów
+            input=tekst  # tekst do przetworzenia
+        )
+        print(f"[baza_danych] Otrzymano odpowiedź z OpenAI")
+        
+        # Wyciągnij wektor z odpowiedzi (zwróć jako listę liczb)
+        embedding = odpowiedz.data[0].embedding
+        print(f"[baza_danych] Embedding wygenerowany pomyślnie (długość: {len(embedding)})")
+        return embedding
+    except Exception as e:
+        print(f"[baza_danych] BŁĄD w generuj_embedding: {e}")
+        import traceback
+        print(f"[baza_danych] Traceback: {traceback.format_exc()}")
+        raise
 
 def pobierz_nazwe_zdjecia(sciezka):
     """
@@ -205,19 +216,30 @@ def wyszukaj_zdjecia(opis_wyszukiwania, liczba_wynikow=5):
     
     Zwraca: lista słowników z metadanymi znalezionych zdjęć (zawiera także similarity)
     """
+    print(f"[baza_danych] Rozpoczynam wyszukiwanie dla: '{opis_wyszukiwania}'")
+    
     # Inicjalizuj kolekcję
     inicjalizuj_kolekcje()
+    print(f"[baza_danych] Kolekcja '{NAZWA_KOLEKCJI}' zainicjalizowana")
     
-    # Wygeneruj embedding dla zapytania (słowo/fraza co szukamy)
-    embedding_zapytania = generuj_embedding(opis_wyszukiwania)
+    try:
+        # Wygeneruj embedding dla zapytania (słowo/fraza co szukamy)
+        print(f"[baza_danych] Generuję embedding dla zapytania...")
+        embedding_zapytania = generuj_embedding(opis_wyszukiwania)
+        print(f"[baza_danych] Embedding wygenerowany (długość: {len(embedding_zapytania)})")
+    except Exception as e:
+        print(f"[baza_danych] BŁĄD przy generowaniu embeddingu: {e}")
+        return []
     
     try:
         # Wyszukaj w Qdrant embeddingi podobne do naszego zapytania
+        print(f"[baza_danych] Wyszukuję w Qdrant...")
         wyniki = klient_qdrant.search(
             collection_name=NAZWA_KOLEKCJI,  # gdzie szukać
             query_vector=embedding_zapytania,  # nasz wektor zapytania
             limit=liczba_wynikow  # ile wyników zwrócić
         )
+        print(f"[baza_danych] Znaleziono {len(wyniki)} wyników")
         
         # Utwórz listę na wyniki
         lista_wynikow = []
@@ -233,12 +255,15 @@ def wyszukaj_zdjecia(opis_wyszukiwania, liczba_wynikow=5):
             
             # Dodaj metadane do listy wyników
             lista_wynikow.append(metadata)
+            print(f"[baza_danych]   - {metadata.get('nazwa_zdjecia')} (similarity: {wynik.score:.4f})")
         
         # Zwróć listę wyników z similarity
         return lista_wynikow
     except Exception as e:
         # Jeśli coś poszło nie tak - wypisz błąd i zwróć pustą listę
-        print(f"[baza_danych] Błąd przy wyszukiwaniu: {e}")
+        print(f"[baza_danych] BŁĄD przy wyszukiwaniu w Qdrant: {e}")
+        import traceback
+        print(f"[baza_danych] Traceback: {traceback.format_exc()}")
         return []
 
 # ===== FUNKCJE DO ZARZĄDZANIA ZDJĘCIAMI =====
