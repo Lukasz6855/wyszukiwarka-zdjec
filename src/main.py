@@ -277,11 +277,8 @@ with tab1:
     
     opis_wyszukiwania = st.text_input(
         "Wprowadź opis szukanych zdjęć:",
-        value=st.session_state.opis_wyszukiwania,
         key="search_input"
     )
-    
-    st.session_state.opis_wyszukiwania = opis_wyszukiwania
     
     if klucz_openai:
         if opis_wyszukiwania:
@@ -298,7 +295,7 @@ with tab1:
                     with col1:
                         sciezka = wynik.get("sciezka")
                         if sciezka:
-                            st.image(sciezka, use_container_width=True)
+                            st.image(sciezka, use_column_width=True)
                     
                     with col2:
                         opis = wynik.get("opis")
