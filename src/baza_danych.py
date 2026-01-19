@@ -234,11 +234,35 @@ def wyszukaj_zdjecia(opis_wyszukiwania, liczba_wynikow=5):
     try:
         # Wyszukaj w Qdrant embeddingi podobne do naszego zapytania
         print(f"[baza_danych] Wyszukuję w Qdrant...")
-        wyniki = klient_qdrant.search(
-            collection_name=NAZWA_KOLEKCJI,  # gdzie szukać
-            query_vector=embedding_zapytania,  # nasz wektor zapytania
-            limit=liczba_wynikow  # ile wyników zwrócić
-        )
+        
+        # Kompatybilność z różnymi wersjami qdrant-client
+        try:
+            # Nowsza wersja (>=1.7.0) - metoda search()
+            wyniki = klient_qdrant.search(
+                collection_name=NAZWA_KOLEKCJI,
+                query_vector=embedding_zapytania,
+                limit=liczba_wynikow
+            )
+        except AttributeError:
+            # Starsza wersja - metoda query_points() lub search_points()
+            from qdrant_client.models import SearchRequest, NamedVector
+            
+            try:
+                # Próba z query_points
+                wyniki = klient_qdrant.query_points(
+                    collection_name=NAZWA_KOLEKCJI,
+                    query=embedding_zapytania,
+                    limit=liczba_wynikow
+                ).points
+            except AttributeError:
+                # Ostatnia próba - search_points
+                from qdrant_client.models import Filter
+                wyniki = klient_qdrant.search_points(
+                    collection_name=NAZWA_KOLEKCJI,
+                    query_vector=embedding_zapytania,
+                    limit=liczba_wynikow
+                )
+        
         print(f"[baza_danych] Znaleziono {len(wyniki)} wyników")
         
         # Utwórz listę na wyniki
