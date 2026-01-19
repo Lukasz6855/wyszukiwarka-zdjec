@@ -22,9 +22,12 @@ def czy_streamlit_cloud():
         "streamlit.io" in os.getenv("HOSTNAME", "")
     )
 
-# Sprawdź klucz z .env TYLKO raz, przed startem Streamlit
-# (używamy zmiennej globalnej aby nie było powtarzanego load_dotenv)
-if "KLUCZ_Z_ENV_SPRAWDZONY" not in st.session_state:
+# Wyczyść os.environ z kluczy (żeby nie persystowały między sesjami)
+if "OPENAI_API_KEY" in os.environ:
+    del os.environ["OPENAI_API_KEY"]
+
+# Sprawdź klucz z .env TYLKO raz na sesję
+if "klucz_z_env" not in st.session_state:
     from dotenv import load_dotenv
     load_dotenv()
     # Sprawdź czy jesteśmy lokalnie i mamy klucz w .env
@@ -36,7 +39,6 @@ if "KLUCZ_Z_ENV_SPRAWDZONY" not in st.session_state:
             st.session_state.klucz_z_env = None
     else:
         st.session_state.klucz_z_env = None
-    st.session_state.KLUCZ_Z_ENV_SPRAWDZONY = True
 
 # ===== KONFIGURACJA STRONY =====
 st.set_page_config(page_title="Znajdywacz zdjęć", layout="wide")
@@ -83,9 +85,8 @@ with st.sidebar:
         # Klucz z .env - użyj automatycznie
         st.success("✅ Klucz OpenAI załadowany z pliku .env")
         st.info("💡 Używasz klucza z lokalnego pliku .env")
-        # Zapisz w os.environ dla modułów (baza_danych, api_openai)
-        os.environ["OPENAI_API_KEY"] = st.session_state.klucz_z_env
         klucz_openai_aktywny = True
+        klucz_openai = st.session_state.klucz_z_env
     else:
         # Brak klucza w .env - wymaga ręcznego wprowadzenia
         if czy_streamlit_cloud():
@@ -102,8 +103,6 @@ with st.sidebar:
             # Walidacja klucza (prosty check)
             if klucz_openai.startswith("sk-") and len(klucz_openai) > 20:
                 st.success("✅ Klucz OpenAI załadowany prawidłowo")
-                # Zapisz w os.environ dla modułów
-                os.environ["OPENAI_API_KEY"] = klucz_openai
                 klucz_openai_aktywny = True
             else:
                 st.error("❌ Nieprawidłowy klucz OpenAI")
@@ -111,6 +110,7 @@ with st.sidebar:
                 klucz_openai_aktywny = False
         else:
             klucz_openai_aktywny = False
+            klucz_openai = None
             st.warning("⚠️ Wprowadź klucz OpenAI, aby korzystać z aplikacji")
     
     # SEKCJA 2: WYBÓR MODELU (dostępny zawsze, ale funkcjonalny tylko gdy klucz jest aktywny)
@@ -249,6 +249,7 @@ with st.sidebar:
                         opisy = przetworz_zdjecia(
                             pliki_do_przetworzenia,
                             st.session_state.model_do_przetworzenia,
+                            klucz_openai,
                             nowe_mapowanie
                         )
                         
@@ -264,7 +265,7 @@ with st.sidebar:
                         
                         # Zapisz embeddingi
                         for item in opisy:
-                            zapisz_embedding(item["opis"], item["sciezka"])
+                            zapisz_embedding(item["opis"], item["sciezka"], klucz_openai)
                         
                         st.success("✅ Zdjęcia przetworzone i zapisane!")
                         
@@ -344,7 +345,7 @@ with tab1:
         if opis_wyszukiwania:
             st.subheader("📋 Wyniki wyszukiwania")
             
-            wyniki = wyszukaj_zdjecia(opis_wyszukiwania)
+            wyniki = wyszukaj_zdjecia(opis_wyszukiwania, klucz_api=klucz_openai)
             
             if wyniki:
                 st.write(f"**Znalezione {len(wyniki)} zdjęcie(a):**")

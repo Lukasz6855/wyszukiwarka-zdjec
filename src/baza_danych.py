@@ -39,13 +39,14 @@ def utworz_klienta_qdrant():
 # Inicjalizuj klienta Qdrant (global - używany przez wszystkie funkcje)
 klient_qdrant = utworz_klienta_qdrant()
 
-def pobierz_klienta_openai():
+def pobierz_klienta_openai(klucz_api=None):
     """
     Pobierz klienta OpenAI z kluczem API
-    Klucz API musi być w zmiennej środowiskowej OPENAI_API_KEY
+    Klucz API może być przekazany jako parametr lub pobrany z zmiennej środowiskowej
     """
-    # Pobierz klucz OpenAI ze zmiennych środowiskowych
-    klucz_api = os.getenv("OPENAI_API_KEY")
+    # Pobierz klucz OpenAI - z parametru lub ze zmiennych środowiskowych
+    if not klucz_api:
+        klucz_api = os.getenv("OPENAI_API_KEY")
     
     # Jeśli klucz nie istnieje - wyrzuć błąd
     if not klucz_api:
@@ -89,15 +90,19 @@ def inicjalizuj_kolekcje():
 
 # ===== FUNKCJE DO OBSŁUGI EMBEDDINGÓW =====
 
-def generuj_embedding(tekst):
+def generuj_embedding(tekst, klucz_api=None):
     """
     Wygeneruj embedding dla tekstu (zamień tekst na wektor)
     Embedding to reprezentacja matematyczna tekstu - liczby które odzwierciedlają znaczenie tekstu
+    
+    Parametry:
+    - tekst: tekst do wygenerowania embeddingu
+    - klucz_api: klucz API OpenAI (opcjonalny, jeśli nie podany będzie pobrany z os.getenv)
     """
     try:
         # Pobierz klienta OpenAI
         print(f"[baza_danych] Pobieram klienta OpenAI...")
-        klient_openai = pobierz_klienta_openai()
+        klient_openai = pobierz_klienta_openai(klucz_api)
         print(f"[baza_danych] Klient OpenAI gotowy")
         
         # Wyślij tekst do OpenAI i otrzymaj embedding
@@ -161,19 +166,20 @@ def sprawdz_czy_zdjecie_istnieje(nazwa_zdjecia):
         print(f"[baza_danych] Błąd przy sprawdzaniu duplikatu: {e}")
         return False
 
-def zapisz_embedding(opis, sciezka_zdjecia=None):
+def zapisz_embedding(opis, sciezka_zdjecia=None, klucz_api=None):
     """
     Zapisz embedding (reprezentacja wektorowa tekstu) w bazie
     
     Parametry:
     - opis: tekst opisu zdjęcia (będzie zamieniony na wektor)
     - sciezka_zdjecia: ścieżka do pliku zdjęcia (opcjonalna)
+    - klucz_api: klucz API OpenAI (opcjonalny)
     """
     # Inicjalizuj kolekcję
     inicjalizuj_kolekcje()
     
     # Wygeneruj embedding dla opisu (zamień tekst na wektor liczb)
-    embedding = generuj_embedding(opis)
+    embedding = generuj_embedding(opis, klucz_api)
     
     # Pobierz nazwę zdjęcia ze ścieżki (np. "foto.jpg" z "C:/Users/.../foto.jpg")
     nazwa_zdjecia = pobierz_nazwe_zdjecia(sciezka_zdjecia)
@@ -206,13 +212,14 @@ def zapisz_embedding(opis, sciezka_zdjecia=None):
         # Jeśli coś poszło nie tak - wypisz błąd
         print(f"[baza_danych] Błąd przy zapisie embeddingu: {e}")
 
-def wyszukaj_zdjecia(opis_wyszukiwania, liczba_wynikow=5):
+def wyszukaj_zdjecia(opis_wyszukiwania, liczba_wynikow=5, klucz_api=None):
     """
     Wyszukaj zdjęcia pasujące do opisu
     
     Parametry:
     - opis_wyszukiwania: tekst co szukamy (np. "psy")
     - liczba_wynikow: ile wyników zwrócić (domyślnie 5)
+    - klucz_api: klucz API OpenAI (opcjonalny)
     
     Zwraca: lista słowników z metadanymi znalezionych zdjęć (zawiera także similarity)
     """
@@ -225,7 +232,7 @@ def wyszukaj_zdjecia(opis_wyszukiwania, liczba_wynikow=5):
     try:
         # Wygeneruj embedding dla zapytania (słowo/fraza co szukamy)
         print(f"[baza_danych] Generuję embedding dla zapytania...")
-        embedding_zapytania = generuj_embedding(opis_wyszukiwania)
+        embedding_zapytania = generuj_embedding(opis_wyszukiwania, klucz_api)
         print(f"[baza_danych] Embedding wygenerowany (długość: {len(embedding_zapytania)})")
     except Exception as e:
         print(f"[baza_danych] BŁĄD przy generowaniu embeddingu: {e}")

@@ -16,13 +16,14 @@ if not os.path.exists(FOLDER_ZDJEC):
     os.makedirs(FOLDER_ZDJEC)  # makedirs = utwórz folder (i wszystkie nadrzędne jeśli potrzeba)
     print(f"[przetwarzanie_zdjec] Utworzono folder '{FOLDER_ZDJEC}'")
 
-def przetworz_zdjecia(lista_plikow, model, mapowanie_nazw=None):
+def przetworz_zdjecia(lista_plikow, model, klucz_api, mapowanie_nazw=None):
     """
     Przetwórz zdjęcia - wygeneruj opisy za pomocą Vision API OpenAI
     
     Parametry:
     - lista_plikow: lista plików przesłanych przez użytkownika (z Streamlit)
     - model: nazwa modelu OpenAI do użycia (np. "gpt-4o-mini", "gpt-4o")
+    - klucz_api: klucz API OpenAI
     - mapowanie_nazw: słownik mapujący indeksy na nowe nazwy (dla duplikatów)
     
     Zwraca: lista słowników z kluczami "opis" i "sciezka"
@@ -32,12 +33,9 @@ def przetworz_zdjecia(lista_plikow, model, mapowanie_nazw=None):
     if mapowanie_nazw is None:
         mapowanie_nazw = {}
     
-    # Pobierz klucz OpenAI ze zmiennych środowiskowych
-    klucz_api = os.getenv("OPENAI_API_KEY")
-    
     # Jeśli klucz nie istnieje - wyrzuć błąd (aplikacja się zatrzyma)
     if not klucz_api:
-        raise ValueError("Brak klucza OpenAI. Ustaw OPENAI_API_KEY w .env lub przez aplikację.")
+        raise ValueError("Brak klucza OpenAI.")
     
     # Utwórz klienta OpenAI - zaraz będziemy go używać do wysyłania zdjęć
     klient = OpenAI(api_key=klucz_api)
