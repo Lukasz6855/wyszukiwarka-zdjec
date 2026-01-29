@@ -1,6 +1,7 @@
 # Dane użytkownika - nie pushować na Git
 zdjecia_przetworzone/
 uploaded_images/
+ROZWIAZANIE_STREAMLIT_CLOUD.md
 
 # Konfiguracja - zawiera klucze API
 .env

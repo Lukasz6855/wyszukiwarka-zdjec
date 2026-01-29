@@ -355,8 +355,14 @@ with tab1:
                     
                     with col1:
                         sciezka = wynik.get("sciezka")
-                        if sciezka:
-                            st.image(sciezka, use_column_width=True)
+                        if sciezka and os.path.exists(sciezka):
+                            try:
+                                st.image(sciezka, use_column_width=True)
+                            except Exception as e:
+                                st.error(f"❌ Błąd wyświetlania: {wynik.get('nazwa_zdjecia', 'brak nazwy')}")
+                                print(f"[main] Błąd wyświetlania zdjęcia {sciezka}: {e}")
+                        else:
+                            st.warning(f"⚠️ Plik nie istnieje: {wynik.get('nazwa_zdjecia', 'brak nazwy')}")
                     
                     with col2:
                         opis = wynik.get("opis")
@@ -418,11 +424,12 @@ with tab2:
                 
                 with col_thumb:
                     # Wyświetl miniaturkę zdjęcia
-                    if sciezka:
+                    if sciezka and os.path.exists(sciezka):
                         try:
                             st.image(sciezka, width=50)
-                        except:
+                        except Exception as e:
                             st.write("📷")
+                            print(f"[main] Błąd wyświetlania miniatury {sciezka}: {e}")
                     else:
                         st.write("📷")
                 
