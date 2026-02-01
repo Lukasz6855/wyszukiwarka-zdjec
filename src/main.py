@@ -22,18 +22,24 @@ def czy_streamlit_cloud():
         "streamlit.io" in os.getenv("HOSTNAME", "")
     )
 
-# Wyczyść os.environ z kluczy (żeby nie persystowały między sesjami)
-if "OPENAI_API_KEY" in os.environ:
-    del os.environ["OPENAI_API_KEY"]
-
-# Sprawdź klucz z .env TYLKO raz na sesję
+# Sprawdź klucz z .env/secrets TYLKO raz na sesję
 if "klucz_z_env" not in st.session_state:
     from dotenv import load_dotenv
     load_dotenv()
-    # Sprawdź czy jesteśmy lokalnie i mamy klucz w .env
-    if not czy_streamlit_cloud():
-        klucz_env = os.getenv("OPENAI_API_KEY")
-        if klucz_env:
+    
+    # Sprawdź klucz w środowisku (lokalnie z .env lub na Streamlit Cloud z secrets)
+    klucz_env = os.getenv("OPENAI_API_KEY")
+    
+    if klucz_env and klucz_env.strip():
+        # Sprawdź czy to nie jest domyślna wartość z przykładów
+        domyslne_wartosci = [
+            "your_openai_api_key_here",
+            "sk-twoj-klucz-openai",
+            "your-api-key-here",
+            "INSERT_YOUR_KEY_HERE"
+        ]
+        
+        if klucz_env not in domyslne_wartosci:
             st.session_state.klucz_z_env = klucz_env
         else:
             st.session_state.klucz_z_env = None
@@ -80,17 +86,26 @@ with st.sidebar:
     st.header("⚙️ Konfiguracja")
     
     # SEKCJA 1: KLUCZ OPENAI
-    # Sprawdź czy mamy klucz z .env (lokalnie)
+    # Sprawdź czy mamy klucz z .env lub secrets
     if st.session_state.get("klucz_z_env"):
-        # Klucz z .env - użyj automatycznie
-        st.success("✅ Klucz OpenAI załadowany z pliku .env")
-        st.info("💡 Używasz klucza z lokalnego pliku .env")
+        # Klucz z .env/secrets - użyj automatycznie
+        if czy_streamlit_cloud():
+            st.success("✅ Klucz OpenAI załadowany z Streamlit Secrets")
+            st.info("💡 Używasz klucza ze Streamlit Cloud secrets")
+        else:
+            st.success("✅ Klucz OpenAI załadowany z pliku .env")
+            st.info("💡 Używasz klucza z lokalnego pliku .env")
+        
         klucz_openai_aktywny = True
         klucz_openai = st.session_state.klucz_z_env
     else:
-        # Brak klucza w .env - wymaga ręcznego wprowadzenia
+        # Brak klucza w .env/secrets - wymaga ręcznego wprowadzenia
         if czy_streamlit_cloud():
-            st.info("☁️ Streamlit Cloud: Wprowadź swój klucz OpenAI")
+            st.warning("⚠️ Brak klucza w Streamlit Secrets")
+            st.info("💡 Wprowadź swój klucz OpenAI poniżej")
+        else:
+            st.warning("⚠️ Brak klucza w pliku .env")
+            st.info("💡 Wprowadź swój klucz OpenAI poniżej lub dodaj go do pliku .env")
         
         klucz_openai = st.text_input(
             "Wprowadź swój klucz OpenAI:",
@@ -100,18 +115,28 @@ with st.sidebar:
         )
         
         if klucz_openai:
-            # Walidacja klucza (prosty check)
-            if klucz_openai.startswith("sk-") and len(klucz_openai) > 20:
+            # Walidacja klucza
+            domyslne_wartosci = [
+                "your_openai_api_key_here",
+                "sk-twoj-klucz-openai",
+                "your-api-key-here",
+                "INSERT_YOUR_KEY_HERE"
+            ]
+            
+            if klucz_openai in domyslne_wartosci:
+                st.error("❌ To jest domyślna wartość przykładowa!")
+                st.info("💡 Wpisz swój prawdziwy klucz OpenAI z https://platform.openai.com/api-keys")
+                klucz_openai_aktywny = False
+            elif klucz_openai.startswith("sk-") and len(klucz_openai) > 20:
                 st.success("✅ Klucz OpenAI załadowany prawidłowo")
                 klucz_openai_aktywny = True
             else:
                 st.error("❌ Nieprawidłowy klucz OpenAI")
-                st.info("💡 Klucz powinien zaczynać się od 'sk-'")
+                st.info("💡 Klucz powinien zaczynać się od 'sk-' i mieć co najmniej 20 znaków")
                 klucz_openai_aktywny = False
         else:
             klucz_openai_aktywny = False
             klucz_openai = None
-            st.warning("⚠️ Wprowadź klucz OpenAI, aby korzystać z aplikacji")
     
     # SEKCJA 2: WYBÓR MODELU (dostępny zawsze, ale funkcjonalny tylko gdy klucz jest aktywny)
     modele, model_domyslny = wczytaj_modele()
